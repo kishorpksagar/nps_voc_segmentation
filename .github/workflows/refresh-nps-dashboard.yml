@@ -1,0 +1,52 @@
+# Save this file to: .github/workflows/refresh-nps-dashboard.yml
+#
+# Refreshes the NPS VOC dashboard daily by pulling the latest survey data
+# from Metabase, re-running sentiment/theme classification, and committing
+# the regenerated nps_voc_dashboard.html back to this repo.
+#
+# Required repo secrets (Settings -> Secrets and variables -> Actions):
+#   METABASE_URL       e.g. https://your-company.metabaseapp.com
+#   METABASE_USERNAME  Metabase login email
+#   METABASE_PASSWORD  Metabase login password
+#   METABASE_DB_ID     Database id for the Databricks connection
+
+name: Refresh NPS Dashboard
+
+on:
+  schedule:
+    - cron: '0 3 * * *'   # 3:00 AM UTC daily — adjust to your preferred time
+  workflow_dispatch: {}    # lets you trigger it manually from the Actions tab
+
+permissions:
+  contents: write   # needed so the built-in GITHUB_TOKEN can push commits
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run refresh script
+        env:
+          METABASE_URL: ${{ secrets.METABASE_URL }}
+          METABASE_USERNAME: ${{ secrets.METABASE_USERNAME }}
+          METABASE_PASSWORD: ${{ secrets.METABASE_PASSWORD }}
+          METABASE_DB_ID: ${{ secrets.METABASE_DB_ID }}
+        run: python refresh_dashboard.py
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "nps-dashboard-bot"
+          git config user.email "actions@github.com"
+          git add nps_voc_dashboard.html
+          git diff --staged --quiet || git commit -m "Auto-refresh NPS dashboard data"
+          git push
