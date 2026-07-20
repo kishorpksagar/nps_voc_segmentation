@@ -31,7 +31,7 @@ METABASE_PASSWORD = os.environ["METABASE_PASSWORD"]
 METABASE_DB_ID = int(os.environ["METABASE_DB_ID"])
 
 TEMPLATE_PATH = "dashboard_template.html"
-OUTPUT_PATH = "nps_voc_dashboard.html"
+OUTPUT_PATH = "index.html"
 
 
 # =============================================================================
