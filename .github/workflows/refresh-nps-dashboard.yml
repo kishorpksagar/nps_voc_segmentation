@@ -47,6 +47,6 @@ jobs:
         run: |
           git config user.name "nps-dashboard-bot"
           git config user.email "actions@github.com"
-          git add nps_voc_dashboard.html
+          git add index.html
           git diff --staged --quiet || git commit -m "Auto-refresh NPS dashboard data"
           git push
