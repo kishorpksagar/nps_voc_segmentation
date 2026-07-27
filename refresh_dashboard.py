@@ -80,7 +80,7 @@ WITH parsed AS (
   WHERE response IS NOT NULL AND trim(response) != '' AND response != '[]'
 ),
 score_rows AS (
-  SELECT id, survey_status, created_at, CAST(item.ans[0] AS INT) as score
+  SELECT id, survey_status, created_at, CAST(element_at(item.ans, 1) AS INT) as score
   FROM parsed LATERAL VIEW explode(items) t AS item
   WHERE item.text = 'score'
 )
@@ -133,12 +133,12 @@ WITH parsed AS (
   WHERE response IS NOT NULL AND trim(response) != '' AND response != '[]'
 ),
 scores AS (
-  SELECT id, CAST(item.ans[0] AS INT) as score
+  SELECT id, CAST(element_at(item.ans, 1) AS INT) as score
   FROM parsed LATERAL VIEW explode(items) t AS item
   WHERE item.text = 'score'
 ),
 freetext AS (
-  SELECT p.id, date(p.created_at) as day, p.survey_status, item.ans[0] as txt
+  SELECT p.id, date(p.created_at) as day, p.survey_status, element_at(item.ans, 1) as txt
   FROM parsed p LATERAL VIEW explode(items) t AS item
   WHERE item.text = 'What is the single most important thing POP Club UPI could do to improve your experience?'
 )
