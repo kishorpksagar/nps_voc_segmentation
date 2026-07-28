@@ -77,7 +77,7 @@ WITH parsed AS (
   SELECT id, survey_status, created_at,
          from_json(response, 'array<struct<ans:array<string>,text:string>>') as items
   FROM pop.cx_nps_user_response
-  WHERE response IS NOT NULL AND trim(response) != '' AND response != '[]'
+  WHERE response IS NOT NULL AND trim(response) != '' AND response != '[]' AND survey_status = 'COMPLETED'
 ),
 score_rows AS (
   SELECT id, survey_status, created_at, CAST(get(item.ans, 0) AS INT) as score
@@ -100,7 +100,7 @@ WITH parsed AS (
   SELECT id, survey_status, created_at,
          from_json(response, 'array<struct<ans:array<string>,text:string>>') as items
   FROM pop.cx_nps_user_response
-  WHERE response IS NOT NULL AND trim(response) != '' AND response != '[]'
+  WHERE response IS NOT NULL AND trim(response) != '' AND response != '[]' AND survey_status = 'COMPLETED'
 ),
 qrows AS (
   SELECT id, survey_status, date(created_at) as day, item.text as qtext, item.ans as ans
@@ -130,7 +130,7 @@ WITH parsed AS (
   SELECT id, survey_status, created_at,
          from_json(response, 'array<struct<ans:array<string>,text:string>>') as items
   FROM pop.cx_nps_user_response
-  WHERE response IS NOT NULL AND trim(response) != '' AND response != '[]'
+  WHERE response IS NOT NULL AND trim(response) != '' AND response != '[]' AND survey_status = 'COMPLETED'
 ),
 scores AS (
   SELECT id, CAST(get(item.ans, 0) AS INT) as score
