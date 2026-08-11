@@ -48,7 +48,8 @@ def get_session_token():
     return resp.json()["id"]
 
 
-def run_query(session_token, sql):
+def _run_query_page(session_token, sql):
+    """Runs one query and returns (rows_as_dicts). Internal helper."""
     resp = requests.post(
         f"{METABASE_URL}/api/dataset",
         headers={"X-Metabase-Session": session_token},
@@ -56,6 +57,10 @@ def run_query(session_token, sql):
             "type": "native",
             "native": {"query": sql},
             "database": METABASE_DB_ID,
+            "constraints": {
+                "max-results": 1000000,
+                "max-results-bare-rows": 1000000,
+            },
         },
         timeout=120,
     )
@@ -66,6 +71,35 @@ def run_query(session_token, sql):
     cols = [c["name"] for c in data["data"]["cols"]]
     rows = data["data"]["rows"]
     return [dict(zip(cols, row)) for row in rows]
+
+
+def run_query(session_token, sql, page_size=500):
+    """
+    Runs `sql` and returns ALL matching rows, paginating with LIMIT/OFFSET
+    ourselves rather than trusting Metabase to honor a client-supplied
+    row-limit override.
+
+    Many Metabase deployments enforce a server-side row cap (an admin
+    setting, e.g. "Unaggregated query row limit") that silently overrides
+    whatever the client requests in the API call body - so a single request
+    can come back truncated with no error, no warning, nothing. Since our
+    queries are ORDER BY <date> ASC, truncation quietly drops the NEWEST
+    rows rather than the oldest, which is exactly the "data stops updating"
+    symptom this caused. Explicit pagination sidesteps that entirely: each
+    page is small enough to be safely under any realistic server cap, and
+    we keep requesting pages until one comes back short of a full page
+    (the signal that we've reached the end).
+    """
+    all_rows = []
+    offset = 0
+    while True:
+        page_sql = f"SELECT * FROM ({sql.rstrip(';')}) t LIMIT {page_size} OFFSET {offset}"
+        page = _run_query_page(session_token, page_sql)
+        all_rows.extend(page)
+        if len(page) < page_size:
+            break
+        offset += page_size
+    return all_rows
 
 
 # =============================================================================
@@ -368,6 +402,20 @@ def main():
     ]
 
     print(f"Got {len(daily)} days, {len(theme_tags)} tag rows, {len(freetext)} comments")
+
+    # Sanity check: warn loudly if the newest comment we pulled looks stale.
+    # Pagination should make truncation-driven staleness impossible now, but
+    # this catches other causes (e.g. the source question text changing,
+    # survey pipeline issues upstream) instead of failing silently.
+    if freetext:
+        latest = max(r["day"] for r in freetext)
+        from datetime import date
+        latest_date = datetime.strptime(latest, "%Y-%m-%d").date()
+        days_stale = (date.today() - latest_date).days
+        if days_stale > 1:
+            print(f"WARNING: newest freetext comment is dated {latest} "
+                  f"({days_stale} days old). Expected data through today or "
+                  f"yesterday. Investigate if this persists.")
 
     bundle = {
         "daily": daily,
