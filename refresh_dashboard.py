@@ -108,15 +108,21 @@ def run_query(session_token, sql, page_size=500):
 
 DAILY_NPS_SQL = """
 WITH parsed AS (
-  SELECT id, survey_status, created_at,
-         from_json(response, 'array<struct<ans:array<string>,text:string>>') as items
+  SELECT id, rating, survey_status, created_at,
+         from_json(response, 'array<struct<ans:array<string>,text:string,free_text:string>>') as items
   FROM pop.cx_nps_user_response
   WHERE response IS NOT NULL AND trim(response) != '' AND response != '[]' AND survey_status = 'COMPLETED' AND survey_name = 'shop1'
 ),
 score_rows AS (
-  SELECT id, survey_status, created_at, CAST(get(item.ans, 0) AS INT) as score
-  FROM parsed LATERAL VIEW explode(items) t AS item
-  WHERE item.text = 'score'
+  -- Score now comes from the `rating` column for current-format responses;
+  -- older responses instead embed a {"text":"score","ans":[...]} entry in
+  -- the JSON with no `rating` value. COALESCE covers both without using
+  -- explode+filter (which would silently drop any row lacking a JSON
+  -- "score" entry from the count entirely - the bug that caused massive
+  -- undercounts on recent dates).
+  SELECT id, created_at,
+         coalesce(rating, CAST(get(get(filter(items, x -> x.text = 'score'), 0).ans, 0) AS INT)) as score
+  FROM parsed
 )
 SELECT date(created_at) as day,
        count(*) as responses,
@@ -132,7 +138,7 @@ ORDER BY day
 THEME_TAGS_SQL = """
 WITH parsed AS (
   SELECT id, survey_status, created_at,
-         from_json(response, 'array<struct<ans:array<string>,text:string>>') as items
+         from_json(response, 'array<struct<ans:array<string>,text:string,free_text:string>>') as items
   FROM pop.cx_nps_user_response
   WHERE response IS NOT NULL AND trim(response) != '' AND response != '[]' AND survey_status = 'COMPLETED' AND survey_name = 'shop1'
 ),
@@ -156,30 +162,34 @@ SELECT day,
        count(*) as cnt
 FROM tags
 GROUP BY day, qtext, tag
-ORDER BY day, qtext, cnt DESC
+ORDER BY day, qtext, cnt DESC, tag
 """
 
 FREETEXT_SQL = """
 WITH parsed AS (
-  SELECT id, survey_status, created_at,
-         from_json(response, 'array<struct<ans:array<string>,text:string>>') as items
+  SELECT id, rating, survey_status, created_at,
+         from_json(response, 'array<struct<ans:array<string>,text:string,free_text:string>>') as items
   FROM pop.cx_nps_user_response
   WHERE response IS NOT NULL AND trim(response) != '' AND response != '[]' AND survey_status = 'COMPLETED' AND survey_name = 'shop1'
 ),
 scores AS (
-  SELECT id, CAST(get(item.ans, 0) AS INT) as score
-  FROM parsed LATERAL VIEW explode(items) t AS item
-  WHERE item.text = 'score'
+  -- Same rating/JSON coalesce as DAILY_NPS_SQL - see comment there.
+  SELECT id, coalesce(rating, CAST(get(get(filter(items, x -> x.text = 'score'), 0).ans, 0) AS INT)) as score
+  FROM parsed
 ),
 freetext AS (
-  SELECT p.id, date(p.created_at) as day, p.survey_status, get(item.ans, 0) as txt
+  -- Newer responses put the actual comment in a `free_text` field with an
+  -- empty `ans` array; older responses put it in ans[0] with no free_text
+  -- field at all. COALESCE covers both formats.
+  SELECT p.id, date(p.created_at) as day, p.survey_status,
+         coalesce(item.free_text, get(item.ans, 0)) as txt
   FROM parsed p LATERAL VIEW explode(items) t AS item
   WHERE item.text = 'What is the single most important thing POP Club UPI could do to improve your experience?'
 )
-SELECT f.day, f.survey_status, s.score, f.txt
+SELECT f.id, f.day, f.survey_status, s.score, f.txt
 FROM freetext f LEFT JOIN scores s ON f.id = s.id
 WHERE f.txt IS NOT NULL AND trim(f.txt) != ''
-ORDER BY f.day
+ORDER BY f.day, f.id
 """
 
 
