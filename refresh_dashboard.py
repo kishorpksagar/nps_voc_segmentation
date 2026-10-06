@@ -107,11 +107,19 @@ def run_query(session_token, sql, page_size=500):
 # =============================================================================
 
 DAILY_NPS_SQL = """
+-- NOTE: earlier versions of this query also required
+-- `response IS NOT NULL AND response != '[]'` in the WHERE clause. That was
+-- correct back when the score was embedded INSIDE the response JSON - but
+-- now that score lives in the separate `rating` column, a completed survey
+-- can have a perfectly valid rating with an EMPTY response array (user gave
+-- a score but skipped every optional follow-up question). That old filter
+-- was silently excluding all of those from every count. Removed it, and
+-- coalesce blank/null `response` to '[]' so from_json never errors on it.
 WITH parsed AS (
   SELECT id, rating, survey_status, created_at,
-         from_json(response, 'array<struct<ans:array<string>,text:string,free_text:string>>') as items
+         from_json(coalesce(nullif(trim(response), ''), '[]'), 'array<struct<ans:array<string>,text:string,free_text:string>>') as items
   FROM pop.cx_nps_user_response
-  WHERE response IS NOT NULL AND trim(response) != '' AND response != '[]' AND survey_status = 'COMPLETED' AND survey_name = 'shop1'
+  WHERE survey_status = 'COMPLETED' AND survey_name = 'shop1'
 ),
 score_rows AS (
   -- Score now comes from the `rating` column for current-format responses;
@@ -138,9 +146,9 @@ ORDER BY day
 THEME_TAGS_SQL = """
 WITH parsed AS (
   SELECT id, survey_status, created_at,
-         from_json(response, 'array<struct<ans:array<string>,text:string,free_text:string>>') as items
+         from_json(coalesce(nullif(trim(response), ''), '[]'), 'array<struct<ans:array<string>,text:string,free_text:string>>') as items
   FROM pop.cx_nps_user_response
-  WHERE response IS NOT NULL AND trim(response) != '' AND response != '[]' AND survey_status = 'COMPLETED' AND survey_name = 'shop1'
+  WHERE survey_status = 'COMPLETED' AND survey_name = 'shop1'
 ),
 qrows AS (
   SELECT id, survey_status, date(created_at) as day, item.text as qtext, item.ans as ans
@@ -168,9 +176,9 @@ ORDER BY day, qtext, cnt DESC, tag
 FREETEXT_SQL = """
 WITH parsed AS (
   SELECT id, rating, survey_status, created_at,
-         from_json(response, 'array<struct<ans:array<string>,text:string,free_text:string>>') as items
+         from_json(coalesce(nullif(trim(response), ''), '[]'), 'array<struct<ans:array<string>,text:string,free_text:string>>') as items
   FROM pop.cx_nps_user_response
-  WHERE response IS NOT NULL AND trim(response) != '' AND response != '[]' AND survey_status = 'COMPLETED' AND survey_name = 'shop1'
+  WHERE survey_status = 'COMPLETED' AND survey_name = 'shop1'
 ),
 scores AS (
   -- Same rating/JSON coalesce as DAILY_NPS_SQL - see comment there.
