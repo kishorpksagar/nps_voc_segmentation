@@ -365,12 +365,13 @@ def classify_theme(text, junk):
         hits = [{"l1": "Others", "l2": "General / Uncategorized"}]
     return hits
 
-def classify_comment(day, score, text):
+def classify_comment(day, score, text, mobile=None):
     text = text.strip()
     junk = is_junk(text)
     return {
         "day": day,
         "score": score,
+        "mobile": mobile,
         "text": text,
         "junk": junk,
         "sentiment": "Neutral" if junk else classify_sentiment(text, score),
@@ -416,7 +417,7 @@ def main():
     print("Fetching open-text comments...")
     freetext_raw = run_query(token, FREETEXT_SQL)
     freetext = [
-        classify_comment(to_day_str(r["day"]), r["score"], r["txt"])
+        classify_comment(to_day_str(r["day"]), r["score"], r["txt"], r.get("mobile"))
         for r in freetext_raw
     ]
 
