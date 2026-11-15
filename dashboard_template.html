@@ -198,7 +198,7 @@
     </div>
     <div class="voc-scroll">
       <table>
-        <thead><tr><th style="width:80px">Date</th><th style="width:50px">Score</th><th style="width:80px">Sentiment</th><th>Comment</th><th style="width:220px">Business unit / Sub-theme</th></tr></thead>
+        <thead><tr><th style="width:80px">Date</th><th style="width:110px">Mobile</th><th style="width:50px">Score</th><th style="width:80px">Sentiment</th><th>Comment</th><th style="width:220px">Business unit / Sub-theme</th></tr></thead>
         <tbody id="vocTableBody"></tbody>
       </table>
     </div>
@@ -539,15 +539,16 @@ function renderVocTable(from, to){
   if(sentF) rows = rows.filter(r=>r.sentiment===sentF);
   if(l1F) rows = rows.filter(r=>(r.voc||[]).some(v=>v.l1===l1F));
   if(l2F) rows = rows.filter(r=>(r.voc||[]).some(v=>v.l2===l2F && (!l1F || v.l1===l1F)));
-  if(searchF) rows = rows.filter(r=>r.text.toLowerCase().includes(searchF));
+  if(searchF) rows = rows.filter(r=>r.text.toLowerCase().includes(searchF) || (r.mobile||'').toLowerCase().includes(searchF));
   rows = rows.slice().sort((a,b)=> a.day < b.day ? 1 : -1);
 
   document.getElementById('vocCount').textContent = rows.length + ' comment' + (rows.length===1?'':'s');
   const tbody = document.getElementById('vocTableBody');
-  if(rows.length===0){ tbody.innerHTML = '<tr><td colspan="5" class="empty">No matching comments</td></tr>'; return; }
+  if(rows.length===0){ tbody.innerHTML = '<tr><td colspan="6" class="empty">No matching comments</td></tr>'; return; }
   tbody.innerHTML = rows.map(r => `
     <tr>
       <td>${fmtDay(r.day)}</td>
+      <td style="white-space:nowrap">${(r.mobile || '-').replace(/</g,'&lt;')}</td>
       <td>${r.score ?? '-'}</td>
       <td><span class="sent ${r.sentiment}">${r.sentiment}</span></td>
       <td>${r.text.replace(/</g,'&lt;')}</td>
