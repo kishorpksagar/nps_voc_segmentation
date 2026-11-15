@@ -175,31 +175,32 @@ ORDER BY day, qtext, cnt DESC, tag
 
 FREETEXT_SQL = """
 WITH parsed AS (
-  SELECT id, rating, survey_status, created_at,
+  SELECT id, user_id, rating, survey_status, created_at,
          from_json(coalesce(nullif(trim(response), ''), '[]'), 'array<struct<ans:array<string>,text:string,free_text:string>>') as items
   FROM pop.cx_nps_user_response
   WHERE survey_status = 'COMPLETED' AND survey_name = 'shop1'
 ),
 scores AS (
-  -- Same rating/JSON coalesce as DAILY_NPS_SQL - see comment there.
   SELECT id, coalesce(rating, CAST(get(get(filter(items, x -> x.text = 'score'), 0).ans, 0) AS INT)) as score
   FROM parsed
 ),
+ph AS (
+  SELECT global_id, max(phone) AS phone FROM pop.userauth_users GROUP BY global_id
+),
 freetext AS (
-  -- Newer responses put the actual comment in a `free_text` field with an
-  -- empty `ans` array; older responses put it in ans[0] with no free_text
-  -- field at all. COALESCE covers both formats.
-  SELECT p.id, date(p.created_at) as day, p.survey_status,
+  SELECT p.id, p.user_id, date(p.created_at) as day, p.survey_status,
          coalesce(item.free_text, get(item.ans, 0)) as txt
   FROM parsed p LATERAL VIEW explode(items) t AS item
   WHERE item.text = 'What is the single most important thing POP Club UPI could do to improve your experience?'
 )
-SELECT f.id, f.day, f.survey_status, s.score, f.txt
-FROM freetext f LEFT JOIN scores s ON f.id = s.id
+SELECT f.id, f.day, f.survey_status, s.score, f.txt,
+       concat(substr(ph.phone,1,3),'XXXXXX',right(ph.phone,4)) AS mobile
+FROM freetext f
+LEFT JOIN scores s ON f.id = s.id
+LEFT JOIN ph ON ph.global_id = f.user_id
 WHERE f.txt IS NOT NULL AND trim(f.txt) != ''
 ORDER BY f.day, f.id
 """
-
 
 # =============================================================================
 # 3. CLASSIFICATION (mirrors nps_voc_classifier.py — kept inline so this
