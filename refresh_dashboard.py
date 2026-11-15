@@ -194,7 +194,7 @@ freetext AS (
   WHERE item.text = 'What is the single most important thing POP Club UPI could do to improve your experience?'
 )
 SELECT f.id, f.day, f.survey_status, s.score, f.txt,
-       concat(substr(ph.phone,1,3),'XXXXXX',right(ph.phone,4)) AS mobile
+        ph.phone AS mobile
 FROM freetext f
 LEFT JOIN scores s ON f.id = s.id
 LEFT JOIN ph ON ph.global_id = f.user_id
